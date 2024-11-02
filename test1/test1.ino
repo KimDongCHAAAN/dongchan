@@ -184,26 +184,26 @@ void loop()
         lcd.setCursor(0, 1); // 커서를 0, 0에 가져다 놓아라. (열, 행)
         lcd.print("Shit ArthurDchan");
 
-        // 1키로 넘으면 노래발사
-        if (RoadCell_Raw_Weight > 1.0) // 1.0 -> 1키로
-        {
-            int size = sizeof(durations) / sizeof(int);
+        // // 1키로 넘으면 노래발사
+        // if (RoadCell_Raw_Weight > 1.0) // 1.0 -> 1키로
+        // {
+        //     int size = sizeof(durations) / sizeof(int);
 
-            for (int note = 0; note < size; note++)
-            {
-                int duration = 1000 / durations[note];
-                tone(Buzzer, melody[note], duration);
+        //     for (int note = 0; note < size; note++)
+        //     {
+        //         int duration = 1000 / durations[note];
+        //         tone(Buzzer, melody[note], duration);
 
-                int pauseBetweenNotes = duration * 1.30;
-                delay(pauseBetweenNotes);
+        //         int pauseBetweenNotes = duration * 1.30;
+        //         delay(pauseBetweenNotes);
 
-                noTone(Buzzer);
-            }
-        }
-        else
-        {
-            noTone(Buzzer);
-        }
+        //         noTone(Buzzer);
+        //     }
+        // }
+        // else
+        // {
+        //     noTone(Buzzer);
+        // }
 
         // lcd.clear(); // 글자를 모두 지워라.
     }
