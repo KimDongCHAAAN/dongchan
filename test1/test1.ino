@@ -2,209 +2,264 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <SoftwareSerial.h>
-// testtest
-#define NOTE_B0 31
-#define NOTE_C1 33
-#define NOTE_CS1 35
-#define NOTE_D1 37
-#define NOTE_DS1 39
-#define NOTE_E1 41
-#define NOTE_F1 44
-#define NOTE_FS1 46
-#define NOTE_G1 49
-#define NOTE_GS1 52
-#define NOTE_A1 55
-#define NOTE_AS1 58
-#define NOTE_B1 62
-#define NOTE_C2 65
-#define NOTE_CS2 69
-#define NOTE_D2 73
-#define NOTE_DS2 78
-#define NOTE_E2 82
-#define NOTE_F2 87
-#define NOTE_FS2 93
-#define NOTE_G2 98
-#define NOTE_GS2 104
-#define NOTE_A2 110
-#define NOTE_AS2 117
-#define NOTE_B2 123
-#define NOTE_C3 131
-#define NOTE_CS3 139
-#define NOTE_DB3 139
-#define NOTE_D3 147
-#define NOTE_DS3 156
-#define NOTE_EB3 156
-#define NOTE_E3 165
-#define NOTE_F3 175
-#define NOTE_FS3 185
-#define NOTE_G3 196
-#define NOTE_GS3 208
-#define NOTE_A3 220
-#define NOTE_AS3 233
-#define NOTE_B3 247
-#define NOTE_C4 262
-#define NOTE_CS4 277
-#define NOTE_D4 294
-#define NOTE_DS4 311
-#define NOTE_E4 330
-#define NOTE_F4 349
-#define NOTE_FS4 370
-#define NOTE_G4 392
-#define NOTE_GS4 415
-#define NOTE_A4 440
-#define NOTE_AS4 466
-#define NOTE_B4 494
-#define NOTE_C5 523
-#define NOTE_CS5 554
-#define NOTE_D5 587
-#define NOTE_DS5 622
-#define NOTE_E5 659
-#define NOTE_F5 698
-#define NOTE_FS5 740
-#define NOTE_G5 784
-#define NOTE_GS5 831
-#define NOTE_A5 880
-#define NOTE_AS5 932
-#define NOTE_B5 988
-#define NOTE_C6 1047
-#define NOTE_CS6 1109
-#define NOTE_D6 1175
-#define NOTE_DS6 1245
-#define NOTE_E6 1319
-#define NOTE_F6 1397
-#define NOTE_FS6 1480
-#define NOTE_G6 1568
-#define NOTE_GS6 1661
-#define NOTE_A6 1760
-#define NOTE_AS6 1865
-#define NOTE_B6 1976
-#define NOTE_C7 2093
-#define NOTE_CS7 2217
-#define NOTE_D7 2349
-#define NOTE_DS7 2489
-#define NOTE_E7 2637
-#define NOTE_F7 2794
-#define NOTE_FS7 2960
-#define NOTE_G7 3136
-#define NOTE_GS7 3322
-#define NOTE_A7 3520
-#define NOTE_AS7 3729
-#define NOTE_B7 3951
-#define NOTE_C8 4186
-#define NOTE_CS8 4435
-#define NOTE_D8 4699
-#define NOTE_DS8 4978
-#define REST 0
+#include <pitches.h>
 
-#define RoadCell0 0
-#define RoadCell1 1
-#define RoadCell2 2
-#define RoadCell3 3
-#define Buzzer 4
-#define BT_RXD 0
-#define BT_TXD 1
-#define LCD_Address 0x27
-#define LOADCELL_DOUT_PIN 2
-#define LOADCELL_SCK_PIN 3
+#define BT_RXD			  2
+#define BT_TXD			  3
+#define Buzzer			  4
+#define LOADCELL_DOUT_PIN 5
+#define LOADCELL_SCK_PIN  6
 
-SoftwareSerial bluetooth(BT_RXD, BT_TXD);  // 블루투스 객체.
-LiquidCrystal_I2C lcd(LCD_Address, 16, 2); // lcd 객체 선언, 가로 16칸, 세로 2칸
-HX711 Weight;                              // 로드셀 앰프 객체.
+#define LCD_Address		  0x27
+#define BT_BUFFER_SIZE	  128
 
-int PrintTmr = 0;                    // 시리얼 프린트 타이머
-float RoadCell_Calibration = -23000; // 로드셀 캘리브레이션
-double RoadCell_Raw_Weight = 0;      // 로드셀 로우 무게
+struct Config {
+	static const float		  ROAD_CELL_CALIBRATION = -23000;  // 로드셀 캘리브레이션
+	static const float		  LCD_ON_WEIGHT			= 10.0;	   // 사람 올라갔을때 LCD 화면 켜지는 임계값 무게, 단위 kg
+	static const float		  LCD_OFF_WEIGHT		= 3.0;	   // 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
+	static const unsigned int BOOT_SEQUENCE_DELAY	= 5000;	   // 부팅하고 웰컴스크린 표시시간, 단위 ms
+	static const unsigned int MAIN_LOOP_INTERVAL	= 100;	   // 메인 무한루프문 반복시간, 단위 ms
+	static const unsigned int LCD_OFF_TIME			= 5000;	   // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
+};
 
-const int melody[] = {
-    NOTE_E5, NOTE_E5, NOTE_E5,
-    NOTE_E5, NOTE_E5, NOTE_E5,
-    NOTE_E5, NOTE_G5, NOTE_C5, NOTE_D5,
-    NOTE_E5,
-    NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5,
-    NOTE_F5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5,
-    NOTE_E5, NOTE_D5, NOTE_D5, NOTE_E5,
-    NOTE_D5, NOTE_G5};
+// 링버퍼 구조체, 검색해보고 대충 개념이라도 파악하면 좋음
+struct BTReceiveBuffer {
+	uint8_t			 buffer[BT_BUFFER_SIZE];
+	volatile uint8_t writeIndex;
+	volatile uint8_t readIndex;
+	volatile uint8_t dataCount;
 
-const int durations[] = {
-    8, 8, 4,
-    8, 8, 4,
-    8, 8, 8, 8,
-    2,
-    8, 8, 8, 8,
-    8, 8, 8, 16, 16,
-    8, 8, 8, 8,
-    4, 4};
+	// 버퍼 초기화
+	void init() {
+		writeIndex = 0;
+		readIndex  = 0;
+		dataCount  = 0;
+	}
 
-void setup()
-{
-    // serial
-    Serial.begin(115200);
+	// 버퍼에 푸시년마냥 데이터 하나 삽입
+	bool write(uint8_t data) {
+		if (dataCount >= BT_BUFFER_SIZE) {
+			return false;  // 버퍼 가득 참
+		}
 
-    // pinmode
-    pinMode(Buzzer, OUTPUT);
+		buffer[writeIndex] = data;
+		writeIndex		   = (writeIndex + 1) % BT_BUFFER_SIZE;
+		dataCount++;
+		return true;
+	}
 
-    // 블루투스
-    bluetooth.begin(9600);
+	// 버퍼에서 가장 마지막 데이터 하나 가져옴
+	bool read(uint8_t* data) {
+		if (dataCount == 0) {
+			return false;  // 버퍼 비어있음
+		}
 
-    // lcd
-    lcd.begin(); // LCD 사용 시작
+		*data	  = buffer[readIndex];
+		readIndex = (readIndex + 1) % BT_BUFFER_SIZE;
+		dataCount--;
+		return true;
+	}
 
-    // 로드셀
-    Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-    Weight.set_scale(RoadCell_Calibration);
-    Weight.tare();
+	// 지금 버퍼에 데이터가 있는지 확인
+	uint8_t available() {
+		return dataCount;
+	}
+};
+
+// 징글징글한년 멜로디와 음길이
+const int melody[]		  = {NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_G5, NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_D5, NOTE_D5, NOTE_E5, NOTE_D5, NOTE_G5};
+const int MusicDuration[] = {8, 8, 4, 8, 8, 4, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, 8, 8, 16, 16, 8, 8, 8, 8, 4, 4};
+
+// 현재 기기 상태 명세
+typedef struct MachineState {
+	bool FirstBootEn;	 // 첫 부팅 여부
+	bool DisplayActive;	 // 현재 디스플레이 활성화 여부
+};
+
+// 현재 기기 상태
+MachineState State = {
+	true,	// FirstBootEn
+	false,	// display active
+};
+
+// 타이머 명세
+typedef struct Timer {
+	bool LoopTmr;	 // 메인 무한루프문 반복타이머
+	bool LcdOffTmr;	 // LCD 화면 꺼지는 타이머
+};
+
+// 현재 타이머
+Timer Timer = {0};
+
+SoftwareSerial	  bluetooth(BT_RXD, BT_TXD);  // 블루투스 객체.
+LiquidCrystal_I2C lcd(LCD_Address, 16, 2);	  // lcd 객체 선언, 가로 16칸, 세로 2칸
+HX711			  Weight;					  // 로드셀 앰프 객체.
+BTReceiveBuffer	  btRxBuffer;				  // 블루투스 수신 링버퍼
+
+double RawWeight = 0;						  // 로드셀 출력 생 무게
+
+void setup() {
+	// serial
+	Serial.begin(115200);
+
+	// pinmode
+	pinMode(Buzzer, OUTPUT);
+
+	// 블루투스
+	bluetooth.begin(9600);
+	btRxBuffer.init();	// 블루투스 링버퍼 초기화
+	attachInterrupt(digitalPinToInterrupt(BT_RXD), NULL, FALLING);
+
+	// lcd
+	lcd.begin();		  // LCD 사용 시작
+	lcd.autoscroll();	  // auto scroll 시작
+	lcd.backlight();	  // 백라이트 끄기
+	lcd.setCursor(0, 0);  // 커서 초기화
+	lcd.noCursor();
+
+	// 로드셀
+	Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+	Weight.set_scale(Config::ROAD_CELL_CALIBRATION);
+	Weight.tare();
 }
 
-void loop()
-{
-    // if (bluetooth.available())
-    // {
-    //     Serial.write(bluetooth.read());
-    // }
-    // if (Serial.available())
-    // {
-    //     // bluetooth.write(Serial.read());
-    // }
+void loop() { Main_Function(); }
 
-    // 100ms 마다 실행
-    if (millis() - PrintTmr > 100)
-    {
-        PrintTmr = millis();
+// early return 쓰기위해 루프함수 따로만듬
+void Main_Function(void) {
+	// 100ms 마다 루프실행
+	if (millis() - Timer.LoopTmr <= Config::MAIN_LOOP_INTERVAL) return;
+	Timer.LoopTmr = millis();
 
-        // 100ms 마다 로드셀 계산 결과 확인되면 값 읽어옴
-        if (Weight.is_ready())
-        {
-            RoadCell_Raw_Weight = Weight.get_units();
-        }
+	// 첫번째 부팅이면 웰컴화면, 로드셀 캘리브레이션 실행
+	if (State.FirstBootEn) {
+		First_Boot_Sequence;  // 5초동안 실행됨
+		return;				  // 웰컴화면 보고 종료됨
+	}
 
-        lcd.setCursor(0, 0); // 커서를 0, 0에 가져다 놓아라. (열, 행)
-        lcd.print(RoadCell_Raw_Weight);
-        Serial.println(RoadCell_Raw_Weight);
+	Communication_Func();  // 블루투스, 시리얼 통신
+	Get_Weight();		   // 로드셀 무게측정
+	Handle_Display();	   // 디스플레이 관리
+}
 
-        lcd.setCursor(0, 1); // 커서를 0, 0에 가져다 놓아라. (열, 행)
-        lcd.print("Shit ArthurDchan");
+// LCD 디스플레이 관리
+void Handle_Display(void) {
+	if (!State.DisplayActive && RawWeight > Config::LCD_ON_WEIGHT) {  // 디스플레이 비활성화 되어있는데 10키로 이상 감지되면
+		Activate_Display();											  // 디스플레이 활성화.
+		Print_Weight();												  // 무게 출력
+	} else if (State.DisplayActive) {								  // 디스플레이 활성화 되어있으면
+		Print_Weight();												  // 무게 출력
 
-        // // 1키로 넘으면 노래발사
-        // if (RoadCell_Raw_Weight > 1.0) // 1.0 -> 1키로
-        // {
-        //     int size = sizeof(durations) / sizeof(int);
+		if (RawWeight < Config::LCD_OFF_WEIGHT) {					  // 지금 무게가 디스플레이 꺼짐 무게보다 낮으면
+			if (millis() - Timer.LcdOffTmr > Config::LCD_OFF_TIME) {  // 무게가 낮은상태로 3초 이상 유지되면
+				Deactivate_Display();								  // 화면 끄기
+			}
+		} else {													  // 지금 무게가 디스플레이 꺼짐 무게보다 높으면
+			Timer.LcdOffTmr = millis();								  // 디스플레이 꺼짐 타이머 초기화
+		}
+	}
+}
 
-        //     for (int note = 0; note < size; note++)
-        //     {
-        //         int duration = 1000 / durations[note];
-        //         tone(Buzzer, melody[note], duration);
+// 디스플레이 활성화
+void Activate_Display() {
+	State.DisplayActive = true;	 // 화면 상태 켬
+	lcd.display();				 // 디스플레이 켜기
+	lcd.backlight();			 // 백라이트 켬
+}
 
-        //         int pauseBetweenNotes = duration * 1.30;
-        //         delay(pauseBetweenNotes);
+// 화면 끄기
+void Deactivate_Display() {
+	State.DisplayActive = false;  // 화면 상태 끔
+	lcd.setCursor(0, 0);		  // 커서 초기화
+	lcd.clear();				  // 글자 지움
+	lcd.noBacklight();			  // 백라이트 끔
+	lcd.noDisplay();			  // 디스플레이 끄기
+}
 
-        //         noTone(Buzzer);
-        //     }
-        // }
-        // else
-        // {
-        //     noTone(Buzzer);
-        // }
+// 무게 출력
+void Print_Weight(void) {
+	lcd.setCursor(0, 0);  // 첫번째줄
+	lcd.print("Current Weight: ");
 
-        // lcd.clear(); // 글자를 모두 지워라.
-    }
+	lcd.setCursor(0, 1);  // 두번째줄
+	lcd.print(RawWeight);
+	lcd.print("\t\tkg");
+
+	// Serial.println(RawWeight);
+}
+
+// 블루투스, 시리얼 통신
+void Communication_Func(void) {
+	Process_Bluetooth_Data();  // 블루투스로 수신한 값에 대한 처리
+	if (Serial.available()) {  // 시리얼 처리
+							   // bluetooth.write(Serial.read());
+	}
+}
+
+// 블루투스 데이터 수신 인터럽트
+void serialEvent() {
+	while (bluetooth.available()) {
+		uint8_t receivedByte = bluetooth.read();
+		btRxBuffer.write(receivedByte);
+	}
+}
+
+// 블루투스 수신된 데이터 처리
+void Process_Bluetooth_Data() {
+	uint8_t receivedByte;
+
+	while (btRxBuffer.read(&receivedByte)) {
+		// 수신된 데이터 처리
+		// 여기는 승필이랑 얘기해서 프로토콜 맞춰야됨
+		switch (receivedByte) {
+			case 'T':  // 영점
+				Weight.tare();
+				bluetooth.println("Zeroing complete");
+				break;
+
+			case 'W':  // 현재 무게 요청
+				bluetooth.println(RawWeight);
+				break;
+
+			default:
+				Serial.println("좆됐다ㅋㅋ 승필이가 이상한거 보내는데");
+				break;
+		}
+	}
+}
+
+// 무게 가져옴
+bool Get_Weight() {
+	if (Weight.is_ready()) {
+		RawWeight = Weight.get_units();
+		return true;
+	}
+	return false;
+}
+
+// 첫 부팅시 웰컴화면 출력 및 로드셀 캘리브레이션 여유 시간 준다
+void First_Boot_Sequence(void) {
+	lcd.setCursor(0, 0);
+	lcd.print("Welcome");
+	lcd.setCursor(0, 1);
+	lcd.print("RoadCell Initializing...");
+
+	if (millis() > Config::BOOT_SEQUENCE_DELAY) {
+		State.FirstBootEn = false;
+	}
+}
+
+// 징글벨 때리는 함수(주의: 노래 재생되는 동안 다른 기능 전부 중지됨)
+void Music_Start(void) {
+	static const int size = sizeof(MusicDuration) / sizeof(int);
+
+	for (int note = 0; note < size; note++) {
+		int duration = 1000 / MusicDuration[note];
+		tone(Buzzer, melody[note], duration);
+
+		int pauseBetweenNotes = duration * 1.30;
+		delay(pauseBetweenNotes);
+
+		noTone(Buzzer);
+	}
 }
