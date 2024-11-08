@@ -4,23 +4,21 @@
 #include <SoftwareSerial.h>
 #include <pitches.h>
 
-#define BT_RXD			  2
-#define BT_TXD			  3
-#define Buzzer			  4
-#define LOADCELL_DOUT_PIN 5
-#define LOADCELL_SCK_PIN  6
+#define BT_RXD				  2
+#define BT_TXD				  3
+#define Buzzer				  4
+#define LOADCELL_DOUT_PIN	  5
+#define LOADCELL_SCK_PIN	  6
 
-#define LCD_Address		  0x27
-#define BT_BUFFER_SIZE	  128
+#define LCD_Address			  0x27
+#define BT_BUFFER_SIZE		  128
 
-struct Config {
-	static const float		  ROAD_CELL_CALIBRATION = -23000;  // 로드셀 캘리브레이션
-	static const float		  LCD_ON_WEIGHT			= 10.0;	   // 사람 올라갔을때 LCD 화면 켜지는 임계값 무게, 단위 kg
-	static const float		  LCD_OFF_WEIGHT		= 3.0;	   // 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
-	static const unsigned int BOOT_SEQUENCE_DELAY	= 5000;	   // 부팅하고 웰컴스크린 표시시간, 단위 ms
-	static const unsigned int MAIN_LOOP_INTERVAL	= 100;	   // 메인 무한루프문 반복시간, 단위 ms
-	static const unsigned int LCD_OFF_TIME			= 5000;	   // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
-};
+#define ROAD_CELL_CALIBRATION -23000  // 로드셀 캘리브레이션
+#define LCD_ON_WEIGHT		  10.0	  // 사람 올라갔을때 LCD 화면 켜지는 임계값 무게, 단위 kg
+#define LCD_OFF_WEIGHT		  3.0	  // 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
+#define BOOT_SEQUENCE_DELAY	  5000	  // 부팅하고 웰컴스크린 표시시간, 단위 ms
+#define MAIN_LOOP_INTERVAL	  100	  // 메인 무한루프문 반복시간, 단위 ms
+#define LCD_OFF_TIME		  5000	  // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
 
 // 링버퍼 구조체, 검색해보고 대충 개념이라도 파악하면 좋음
 struct BTReceiveBuffer {
@@ -119,7 +117,7 @@ void setup() {
 
 	// 로드셀
 	Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-	Weight.set_scale(Config::ROAD_CELL_CALIBRATION);
+	Weight.set_scale(ROAD_CELL_CALIBRATION);
 	Weight.tare();
 }
 
@@ -128,7 +126,7 @@ void loop() { Main_Function(); }
 // early return 쓰기위해 루프함수 따로만듬
 void Main_Function(void) {
 	// 100ms 마다 루프실행
-	if (millis() - Timer.LoopTmr <= Config::MAIN_LOOP_INTERVAL) return;
+	if (millis() - Timer.LoopTmr <= MAIN_LOOP_INTERVAL) return;
 	Timer.LoopTmr = millis();
 
 	// 첫번째 부팅이면 웰컴화면, 로드셀 캘리브레이션 실행
@@ -144,18 +142,18 @@ void Main_Function(void) {
 
 // LCD 디스플레이 관리
 void Handle_Display(void) {
-	if (!State.DisplayActive && RawWeight > Config::LCD_ON_WEIGHT) {  // 디스플레이 비활성화 되어있는데 10키로 이상 감지되면
-		Activate_Display();											  // 디스플레이 활성화.
-		Print_Weight();												  // 무게 출력
-	} else if (State.DisplayActive) {								  // 디스플레이 활성화 되어있으면
-		Print_Weight();												  // 무게 출력
+	if (!State.DisplayActive && RawWeight > LCD_ON_WEIGHT) {  // 디스플레이 비활성화 되어있는데 10키로 이상 감지되면
+		Activate_Display();									  // 디스플레이 활성화.
+		Print_Weight();										  // 무게 출력
+	} else if (State.DisplayActive) {						  // 디스플레이 활성화 되어있으면
+		Print_Weight();										  // 무게 출력
 
-		if (RawWeight < Config::LCD_OFF_WEIGHT) {					  // 지금 무게가 디스플레이 꺼짐 무게보다 낮으면
-			if (millis() - Timer.LcdOffTmr > Config::LCD_OFF_TIME) {  // 무게가 낮은상태로 3초 이상 유지되면
-				Deactivate_Display();								  // 화면 끄기
+		if (RawWeight < LCD_OFF_WEIGHT) {					  // 지금 무게가 디스플레이 꺼짐 무게보다 낮으면
+			if (millis() - Timer.LcdOffTmr > LCD_OFF_TIME) {  // 무게가 낮은상태로 3초 이상 유지되면
+				Deactivate_Display();						  // 화면 끄기
 			}
-		} else {													  // 지금 무게가 디스플레이 꺼짐 무게보다 높으면
-			Timer.LcdOffTmr = millis();								  // 디스플레이 꺼짐 타이머 초기화
+		} else {											  // 지금 무게가 디스플레이 꺼짐 무게보다 높으면
+			Timer.LcdOffTmr = millis();						  // 디스플레이 꺼짐 타이머 초기화
 		}
 	}
 }
@@ -244,7 +242,7 @@ void First_Boot_Sequence(void) {
 	lcd.setCursor(0, 1);
 	lcd.print("RoadCell Initializing...");
 
-	if (millis() > Config::BOOT_SEQUENCE_DELAY) {
+	if (millis() > BOOT_SEQUENCE_DELAY) {
 		State.FirstBootEn = false;
 	}
 }
