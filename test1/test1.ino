@@ -21,6 +21,8 @@
 #define MAIN_LOOP_INTERVAL	  1		  // 메인 무한루프문 반복시간, 단위 ms
 #define LCD_OFF_TIME		  3000	  // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
 
+// 커밋 연습 1
+
 // 링버퍼 구조체, 검색해보고 대충 개념이라도 파악하면 좋음
 struct BTReceiveBuffer {
 	uint8_t			 buffer[BT_BUFFER_SIZE];
