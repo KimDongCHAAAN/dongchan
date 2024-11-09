@@ -18,54 +18,8 @@
 #define LCD_OFF_WEIGHT		  3.0	  // 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
 #define WELCOME_SCREEN_DELAY  10000	  // 부팅하고 웰컴스크린 표시시간, 단위 ms
 #define WELCOME_MESSAGE_DELAY 200	  // 부팅 메시지 표시시간, 단위 ms
-#define MAIN_LOOP_INTERVAL	  1		  // 메인 무한루프문 반복시간, 단위 ms
+#define MAIN_LOOP_INTERVAL	  10	  // 메인 무한루프문 반복시간, 단위 ms
 #define LCD_OFF_TIME		  3000	  // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
-
-// 커밋 연습 1
-
-// 링버퍼 구조체, 검색해보고 대충 개념이라도 파악하면 좋음
-struct BTReceiveBuffer {
-	uint8_t			 buffer[BT_BUFFER_SIZE];
-	volatile uint8_t writeIndex;
-	volatile uint8_t readIndex;
-	volatile uint8_t dataCount;
-
-	// 버퍼 초기화
-	void init() {
-		writeIndex = 0;
-		readIndex  = 0;
-		dataCount  = 0;
-	}
-
-	// 버퍼에 푸시년마냥 데이터 하나 삽입
-	bool write(uint8_t data) {
-		if (dataCount >= BT_BUFFER_SIZE) {
-			return false;  // 버퍼 가득 참
-		}
-
-		buffer[writeIndex] = data;
-		writeIndex		   = (writeIndex + 1) % BT_BUFFER_SIZE;
-		dataCount++;
-		return true;
-	}
-
-	// 버퍼에서 가장 마지막 데이터 하나 가져옴
-	bool read(uint8_t* data) {
-		if (dataCount == 0) {
-			return false;  // 버퍼 비어있음
-		}
-
-		*data	  = buffer[readIndex];
-		readIndex = (readIndex + 1) % BT_BUFFER_SIZE;
-		dataCount--;
-		return true;
-	}
-
-	// 지금 버퍼에 데이터가 있는지 확인
-	uint8_t available() {
-		return dataCount;
-	}
-};
 
 // 징글징글한년 멜로디와 음길이
 const int melody[]		  = {NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_G5, NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_D5, NOTE_D5, NOTE_E5, NOTE_D5, NOTE_G5};
@@ -109,7 +63,6 @@ Timer Timer = {0, 0, 0, 0};
 SoftwareSerial	  bluetooth(BT_RXD, BT_TXD);  // 블루투스 객체.
 LiquidCrystal_I2C lcd(LCD_Address, 16, 2);	  // lcd 객체 선언, 가로 16칸, 세로 2칸
 HX711			  Weight;					  // 로드셀 앰프 객체.
-BTReceiveBuffer	  btRxBuffer;				  // 블루투스 수신 링버퍼
 
 void Main_Function(void);
 
@@ -124,8 +77,7 @@ void setup() {
 
 	// 블루투스
 	bluetooth.begin(9600);
-	btRxBuffer.init();	// 블루투스 링버퍼 초기화
-	attachInterrupt(digitalPinToInterrupt(BT_RXD), NULL, FALLING);
+	// btRxBuffer.init();	// 블루투스 링버퍼 초기화
 
 	// lcd
 	lcd.begin();				 // LCD 사용 시작
@@ -153,9 +105,19 @@ void Main_Function(void) {
 		return;					// 웰컴화면 보고 종료됨
 	}
 
-	Communication_Func();  // 블루투스, 시리얼 통신
-	Get_Weight();		   // 로드셀 무게측정
-	Handle_Display();	   // 디스플레이 관리
+	// Communication_Func();  // 블루투스, 시리얼 통신
+	// Process_Bluetooth_Data();
+	if (bluetooth.available()) {
+		char c = bluetooth.read();
+		if (c == '\n') return;	// 엔터키 무시
+		Serial.print("블루투스 수신 데이터: ");
+		Serial.println(c);
+		// bluetooth.write("제 무게는 ");	// 답장
+		bluetooth.println(RawWeight);
+		// bluetooth.println("kg입니다.");
+	}
+	Get_Weight();	   // 로드셀 무게측정
+	Handle_Display();  // 디스플레이 관리
 }
 
 // LCD 디스플레이 관리
@@ -207,44 +169,46 @@ void Print_Weight(void) {
 }
 
 // 블루투스, 시리얼 통신
-void Communication_Func(void) {
-	Process_Bluetooth_Data();  // 블루투스로 수신한 값에 대한 처리
-	if (Serial.available()) {  // 시리얼 처리
-							   // bluetooth.write(Serial.read());
-	}
-}
+// void Communication_Func(void) {
+// 	Process_Bluetooth_Data();  // 블루투스로 수신한 값에 대한 처리
+// 	if (Serial.available()) {  // 시리얼 처리
+// 							   // bluetooth.write(Serial.read());
+// 	}
+// }
 
 // 블루투스 데이터 수신 인터럽트
-void serialEvent() {
-	while (bluetooth.available()) {
-		uint8_t receivedByte = bluetooth.read();
-		btRxBuffer.write(receivedByte);
-	}
-}
+// void serialEvent() {
+// 	while (bluetooth.available()) {
+// 		uint8_t receivedByte = bluetooth.read();
+// 		btRxBuffer.write(receivedByte);
+// 		Serial.print(receivedByte);
+// 		Serial.println("ㅅㅂ블루투스 받았따.");
+// 	}
+// }
 
 // 블루투스 수신된 데이터 처리
-void Process_Bluetooth_Data() {
-	uint8_t receivedByte;
+// void Process_Bluetooth_Data() {
+// 	uint8_t receivedByte;
 
-	while (btRxBuffer.read(&receivedByte)) {
-		// 수신된 데이터 처리
-		// 여기는 승필이랑 얘기해서 프로토콜 맞춰야됨
-		switch (receivedByte) {
-			case 'T':  // 영점
-				Weight.tare();
-				bluetooth.println("Zeroing complete");
-				break;
+// 	while (btRxBuffer.read(&receivedByte)) {
+// 		// 수신된 데이터 처리
+// 		// 여기는 승필이랑 얘기해서 프로토콜 맞춰야됨
+// 		switch (receivedByte) {
+// 			case 'T':  // 영점
+// 				Weight.tare();
+// 				bluetooth.println("Zeroing complete");
+// 				break;
 
-			case 'W':  // 현재 무게 요청
-				bluetooth.println(RawWeight);
-				break;
+// 			case 'W':  // 현재 무게 요청
+// 				bluetooth.println(RawWeight);
+// 				break;
 
-			default:
-				Serial.println("좆됐다ㅋㅋ 승필이가 이상한거 보내는데");
-				break;
-		}
-	}
-}
+// 			default:
+// 				Serial.println("좆됐다ㅋㅋ 승필이가 이상한거 보내는데");
+// 				break;
+// 		}
+// 	}
+// }
 
 // 무게 가져옴
 bool Get_Weight() {
