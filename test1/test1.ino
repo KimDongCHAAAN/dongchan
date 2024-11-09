@@ -16,9 +16,10 @@
 #define ROAD_CELL_CALIBRATION -23000  // 로드셀 캘리브레이션
 #define LCD_ON_WEIGHT		  10.0	  // 사람 올라갔을때 LCD 화면 켜지는 임계값 무게, 단위 kg
 #define LCD_OFF_WEIGHT		  3.0	  // 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
-#define BOOT_SEQUENCE_DELAY	  5000	  // 부팅하고 웰컴스크린 표시시간, 단위 ms
-#define MAIN_LOOP_INTERVAL	  100	  // 메인 무한루프문 반복시간, 단위 ms
-#define LCD_OFF_TIME		  5000	  // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
+#define WELCOME_SCREEN_DELAY  10000	  // 부팅하고 웰컴스크린 표시시간, 단위 ms
+#define WELCOME_MESSAGE_DELAY 200	  // 부팅 메시지 표시시간, 단위 ms
+#define MAIN_LOOP_INTERVAL	  1		  // 메인 무한루프문 반복시간, 단위 ms
+#define LCD_OFF_TIME		  3000	  // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
 
 // 링버퍼 구조체, 검색해보고 대충 개념이라도 파악하면 좋음
 struct BTReceiveBuffer {
@@ -69,32 +70,48 @@ const int melody[]		  = {NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, N
 const int MusicDuration[] = {8, 8, 4, 8, 8, 4, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, 8, 8, 16, 16, 8, 8, 8, 8, 4, 4};
 
 // 현재 기기 상태 명세
-typedef struct MachineState {
-	bool FirstBootEn;	 // 첫 부팅 여부
-	bool DisplayActive;	 // 현재 디스플레이 활성화 여부
+struct MachineState {
+	bool FirstBootEn;  // 첫 부팅 여부
+					   // bool DisplayActive;	 // 현재 디스플레이 활성화 여부
 };
 
 // 현재 기기 상태
 MachineState State = {
-	true,	// FirstBootEn
-	false,	// display active
+	true,  // FirstBootEn
+		   // false,	// display active
 };
 
 // 타이머 명세
-typedef struct Timer {
-	bool LoopTmr;	 // 메인 무한루프문 반복타이머
-	bool LcdOffTmr;	 // LCD 화면 꺼지는 타이머
+struct Timer {
+	unsigned long LoopTmr;			  // 메인 무한루프문 반복타이머
+	unsigned long LcdOffTmr;		  // LCD 화면 꺼지는 타이머
+	unsigned long LcdWelcomeLoading;  // LCD 웰컴스크린 왼쪽으로 한칸씩 이동 간격
+	unsigned long LcdWelcomeTmr;	  // LCD 웰컴스크린 타이머
+};
+
+// 커스텀 글자1 (8개까지 가능)
+byte Custom1[8] = {
+	B01110,
+	B01110,
+	B01110,
+	B10100,
+	B11111,
+	B00101,
+	B11100,
+	B10111,
 };
 
 // 현재 타이머
-Timer Timer = {0};
+Timer Timer = {0, 0, 0, 0};
 
 SoftwareSerial	  bluetooth(BT_RXD, BT_TXD);  // 블루투스 객체.
 LiquidCrystal_I2C lcd(LCD_Address, 16, 2);	  // lcd 객체 선언, 가로 16칸, 세로 2칸
 HX711			  Weight;					  // 로드셀 앰프 객체.
 BTReceiveBuffer	  btRxBuffer;				  // 블루투스 수신 링버퍼
 
-double RawWeight = 0;						  // 로드셀 출력 생 무게
+void Main_Function(void);
+
+double RawWeight = 0;  // 로드셀 출력 생 무게
 
 void setup() {
 	// serial
@@ -109,11 +126,10 @@ void setup() {
 	attachInterrupt(digitalPinToInterrupt(BT_RXD), NULL, FALLING);
 
 	// lcd
-	lcd.begin();		  // LCD 사용 시작
-	lcd.autoscroll();	  // auto scroll 시작
-	lcd.backlight();	  // 백라이트 끄기
-	lcd.setCursor(0, 0);  // 커서 초기화
-	lcd.noCursor();
+	lcd.begin();				 // LCD 사용 시작
+	lcd.backlight();			 // 백라이트 켜기
+	lcd.setCursor(0, 0);		 // 커서 초기화
+	lcd.createChar(1, Custom1);	 // 커스텀 글자 1번을 생성 후 LCD에 등록(8개까지 가능)
 
 	// 로드셀
 	Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
@@ -131,8 +147,8 @@ void Main_Function(void) {
 
 	// 첫번째 부팅이면 웰컴화면, 로드셀 캘리브레이션 실행
 	if (State.FirstBootEn) {
-		First_Boot_Sequence;  // 5초동안 실행됨
-		return;				  // 웰컴화면 보고 종료됨
+		First_Boot_Sequence();	// 5초동안 실행됨
+		return;					// 웰컴화면 보고 종료됨
 	}
 
 	Communication_Func();  // 블루투스, 시리얼 통신
@@ -142,36 +158,38 @@ void Main_Function(void) {
 
 // LCD 디스플레이 관리
 void Handle_Display(void) {
-	if (!State.DisplayActive && RawWeight > LCD_ON_WEIGHT) {  // 디스플레이 비활성화 되어있는데 10키로 이상 감지되면
-		Activate_Display();									  // 디스플레이 활성화.
-		Print_Weight();										  // 무게 출력
-	} else if (State.DisplayActive) {						  // 디스플레이 활성화 되어있으면
-		Print_Weight();										  // 무게 출력
+	if (RawWeight > LCD_ON_WEIGHT) {  // 디스플레이 비활성화 되어있는데 10키로 이상 감지되면
+		Activate_Display();			  // 디스플레이 활성화.
+		Print_Weight();				  // 무게 출력
+		Timer.LcdOffTmr = millis();
 
-		if (RawWeight < LCD_OFF_WEIGHT) {					  // 지금 무게가 디스플레이 꺼짐 무게보다 낮으면
-			if (millis() - Timer.LcdOffTmr > LCD_OFF_TIME) {  // 무게가 낮은상태로 3초 이상 유지되면
-				Deactivate_Display();						  // 화면 끄기
-			}
-		} else {											  // 지금 무게가 디스플레이 꺼짐 무게보다 높으면
-			Timer.LcdOffTmr = millis();						  // 디스플레이 꺼짐 타이머 초기화
+		Serial.println(Timer.LcdOffTmr);
+	} else if (RawWeight < LCD_OFF_WEIGHT) {			  // 지금 무게가 디스플레이 꺼짐 무게보다 낮으면
+		if (millis() - Timer.LcdOffTmr > LCD_OFF_TIME) {  // 무게가 3키로보다 낮은상태로 3초 이상 유지되면
+			Deactivate_Display();						  // 화면 끄기
+		} else {
+			Print_Weight();
+			Activate_Display();
 		}
+	} else {
+		Activate_Display();
+		Print_Weight();
+		Timer.LcdOffTmr = millis();
 	}
 }
 
 // 디스플레이 활성화
 void Activate_Display() {
-	State.DisplayActive = true;	 // 화면 상태 켬
-	lcd.display();				 // 디스플레이 켜기
-	lcd.backlight();			 // 백라이트 켬
+	if (!lcd.getBacklight()) {
+		lcd.backlight();  // 백라이트 켬
+	}
 }
 
 // 화면 끄기
 void Deactivate_Display() {
-	State.DisplayActive = false;  // 화면 상태 끔
-	lcd.setCursor(0, 0);		  // 커서 초기화
-	lcd.clear();				  // 글자 지움
-	lcd.noBacklight();			  // 백라이트 끔
-	lcd.noDisplay();			  // 디스플레이 끄기
+	lcd.setCursor(0, 0);  // 커서 초기화
+	lcd.clear();		  // 글자 지움
+	lcd.noBacklight();	  // 백라이트 끔
 }
 
 // 무게 출력
@@ -181,9 +199,9 @@ void Print_Weight(void) {
 
 	lcd.setCursor(0, 1);  // 두번째줄
 	lcd.print(RawWeight);
-	lcd.print("\t\tkg");
-
-	// Serial.println(RawWeight);
+	lcd.setCursor(6, 1);  // 두번째줄
+	lcd.print("kg");
+	lcd.write(byte(1));
 }
 
 // 블루투스, 시리얼 통신
@@ -237,13 +255,28 @@ bool Get_Weight() {
 
 // 첫 부팅시 웰컴화면 출력 및 로드셀 캘리브레이션 여유 시간 준다
 void First_Boot_Sequence(void) {
-	lcd.setCursor(0, 0);
-	lcd.print("Welcome");
-	lcd.setCursor(0, 1);
-	lcd.print("RoadCell Initializing...");
+	static bool		   firstBoot	  = false;
+	static int		   LcdCursor	  = 0;
+	static const float ProgressTiming = WELCOME_SCREEN_DELAY / 16 - ((WELCOME_SCREEN_DELAY / 16) * 0.1);  // 웰컴스크린 시간 / 16칸 - ((웰컴스크린 시간/16칸) * 10%)
 
-	if (millis() > BOOT_SEQUENCE_DELAY) {
-		State.FirstBootEn = false;
+	// 이 함수 처음 들어왔을때만 실행
+	if (!firstBoot) {
+		Timer.LcdWelcomeTmr = Timer.LcdWelcomeLoading = millis();
+		firstBoot									  = true;
+		lcd.setCursor(0, 0);
+		lcd.print("Welcome Loading");
+		lcd.setCursor(0, 1);
+		lcd.print("________________");
+	}
+
+	if (millis() - Timer.LcdWelcomeLoading > ProgressTiming) {	// 한칸씩 로딩바 나옴
+		Timer.LcdWelcomeLoading = millis();
+		lcd.setCursor(LcdCursor++, 1);
+		lcd.print("0");
+	}
+
+	if (millis() - Timer.LcdWelcomeTmr > WELCOME_SCREEN_DELAY) {  // 웰컴스크린 5초 지나면
+		State.FirstBootEn = false;								  // 웰컴스크린 실행 비트 해제
 	}
 }
 
