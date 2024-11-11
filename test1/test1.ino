@@ -57,6 +57,29 @@ byte Custom1[8] = {
 	B10111,
 };
 
+// 커스텀글자2
+byte Custom2[8] = {
+	B11111,
+	B11111,
+	B11111,
+	B11111,
+	B11111,
+	B11111,
+	B11111,
+	B11111,
+};
+
+// 커스텀글자3
+byte Custom3[8] = {
+	B11111,
+	B10001,
+	B10001,
+	B10001,
+	B10001,
+	B10001,
+	B10001,
+	B11111,
+};
 // 현재 타이머
 Timer Timer = {0, 0, 0, 0};
 
@@ -83,7 +106,10 @@ void setup() {
 	lcd.begin();				 // LCD 사용 시작
 	lcd.backlight();			 // 백라이트 켜기
 	lcd.setCursor(0, 0);		 // 커서 초기화
+
 	lcd.createChar(1, Custom1);	 // 커스텀 글자 1번을 생성 후 LCD에 등록(8개까지 가능)
+	lcd.createChar(2, Custom2);	 // 커스텀 글자 2번을 생성 후 LCD에 등록(8개까지 가능)
+	lcd.createChar(3, Custom3);	 // 커스텀 글자 3번을 생성 후 LCD에 등록(8개까지 가능)
 
 	// 로드셀
 	Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
@@ -231,14 +257,21 @@ void First_Boot_Sequence(void) {
 		firstBoot									  = true;
 		lcd.setCursor(0, 0);
 		lcd.print("Welcome Loading");
+		// lcd.setCursor(0, 1);
+		// lcd.print("________________");
 		lcd.setCursor(0, 1);
-		lcd.print("________________");
+		// 셋커서 한칸식 옮기고 write로 커스텀 빈칸 쓰기
+		for (size_t i = 0; i < 16; i++) {
+			lcd.setCursor(i, 1);
+			lcd.write(byte(3));
+		}
 	}
 
 	if (millis() - Timer.LcdWelcomeLoading > ProgressTiming) {	// 한칸씩 로딩바 나옴
 		Timer.LcdWelcomeLoading = millis();
 		lcd.setCursor(LcdCursor++, 1);
-		lcd.print("0");
+		lcd.write(byte(2));	 // 커스텀글자 커서 값 가져와서 출력
+							 // lcd.print("0");
 	}
 
 	if (millis() - Timer.LcdWelcomeTmr > WELCOME_SCREEN_DELAY) {  // 웰컴스크린 5초 지나면
