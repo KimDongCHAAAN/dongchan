@@ -249,7 +249,7 @@ bool Get_Weight() {
 void First_Boot_Sequence(void) {
 	static bool		   firstBoot	  = false;
 	static int		   LcdCursor	  = 0;
-	static const float ProgressTiming = WELCOME_SCREEN_DELAY / 16 - ((WELCOME_SCREEN_DELAY / 16) * 0.1);  // 웰컴스크린 시간 / 16칸 - ((웰컴스크린 시간/16칸) * 10%)
+	static const float ProgressTiming = (WELCOME_SCREEN_DELAY >> 4) - ((WELCOME_SCREEN_DELAY >> 4) * 0.1);	// 웰컴스크린 시간 / 16칸 - ((웰컴스크린 시간/16칸) * 10%)
 
 	// 이 함수 처음 들어왔을때만 실행
 	if (!firstBoot) {
