@@ -13,13 +13,17 @@
 #define LCD_Address			  0x27
 #define BT_BUFFER_SIZE		  128
 
-#define ROAD_CELL_CALIBRATION -23000  // 로드셀 캘리브레이션
-#define LCD_ON_WEIGHT		  10.0	  // 사람 올라갔을때 LCD 화면 켜지는 임계값 무게, 단위 kg
-#define LCD_OFF_WEIGHT		  3.0	  // 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
-#define WELCOME_SCREEN_DELAY  10000	  // 부팅하고 웰컴스크린 표시시간, 단위 ms
-#define WELCOME_MESSAGE_DELAY 200	  // 부팅 메시지 표시시간, 단위 ms
-#define MAIN_LOOP_INTERVAL	  10	  // 메인 무한루프문 반복시간, 단위 ms
-#define LCD_OFF_TIME		  3000	  // 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
+#define SEC					  1000
+#define SECS(x)				  (SEC * x)
+
+#define ROAD_CELL_CALIBRATION -23000	// 로드셀 캘리브레이션
+#define LCD_ON_WEIGHT		  10.0		// 사람 올라갔을때 LCD 화면 켜지는 임계값 무게, 단위 kg
+#define LCD_OFF_WEIGHT		  3.0		// 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
+#define WELCOME_SCREEN_DELAY  SECS(10)	// 부팅하고 웰컴스크린 표시시간, 단위 ms
+#define WELCOME_MESSAGE_DELAY 200		// 부팅 메시지 표시시간, 단위 ms
+#define MAIN_LOOP_INTERVAL	  10		// 메인 무한루프문 반복시간, 단위 ms
+#define LCD_OFF_TIME		  SECS(3)	// 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
+#define ALARM_OFF_WEIGHT	  50.0		// 알람 활성화 시 알람 해제하기 위해서 넘겨야 하는 무게 임계값. 단위 kg
 
 // 징글징글한년 멜로디와 음길이
 const int melody[]		  = {NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_G5, NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_D5, NOTE_D5, NOTE_E5, NOTE_D5, NOTE_G5};
@@ -28,6 +32,7 @@ const int MusicDuration[] = {8, 8, 4, 8, 8, 4, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, 8, 
 // 현재 기기 상태 명세
 struct MachineState {
 	bool FirstBootEn;  // 첫 부팅 여부
+	bool AlarmActive;  // 알람 활성화 여부
 					   // bool DisplayActive;	 // 현재 디스플레이 활성화 여부
 };
 
@@ -43,6 +48,9 @@ struct Timer {
 	unsigned long LcdOffTmr;		  // LCD 화면 꺼지는 타이머
 	unsigned long LcdWelcomeLoading;  // LCD 웰컴스크린 왼쪽으로 한칸씩 이동 간격
 	unsigned long LcdWelcomeTmr;	  // LCD 웰컴스크린 타이머
+	unsigned long AlarmWeightChkTmr;  // 알람 울려서 무게 올라갔을때 임계값 넘는 디바운스 타이머
+	unsigned long AlarmOffTmr;		  // 알람 울려서 무게 올라갔을때 알람 꺼지기까지 타이머
+	unsigned long MusicDelayTmr;	  // 음악 음 간 간격 타이머.
 };
 
 // 커스텀 글자1 (8개까지 가능)
@@ -93,14 +101,13 @@ double RawWeight = 0;  // 로드셀 출력 생 무게
 
 void setup() {
 	// serial
-	Serial.begin(115200);
+	Serial.begin(115200);  // 이건 디버깅 전용 아두이노 내부 시리얼
 
 	// pinmode
 	pinMode(Buzzer, OUTPUT);
 
 	// 블루투스
-	bluetooth.begin(9600);
-	// btRxBuffer.init();	// 블루투스 링버퍼 초기화
+	bluetooth.begin(9600);	// 블루투스는 보드레이트 9600
 
 	// lcd
 	lcd.begin();				 // LCD 사용 시작
@@ -112,9 +119,9 @@ void setup() {
 	lcd.createChar(3, Custom3);	 // 커스텀 글자 3번을 생성 후 LCD에 등록(8개까지 가능)
 
 	// 로드셀
-	Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-	Weight.set_scale(ROAD_CELL_CALIBRATION);
-	Weight.tare();
+	Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);	// 로드셀 객체 만든다
+	Weight.set_scale(ROAD_CELL_CALIBRATION);			// 캘리브레이션 시작.
+	Weight.tare();										// 부팅시 영점 잡음.
 }
 
 void loop() { Main_Function(); }
@@ -131,19 +138,31 @@ void Main_Function(void) {
 		return;					// 웰컴화면 보고 종료됨
 	}
 
-	// Communication_Func();  // 블루투스, 시리얼 통신
-	// Process_Bluetooth_Data();
-	if (bluetooth.available()) {
-		char c = bluetooth.read();
-		if (c == '\n') return;	// 엔터키 무시
-		Serial.print("블루투스 수신 데이터: ");
-		Serial.println(c);
-		// bluetooth.write("제 무게는 ");	// 답장
-		bluetooth.println(RawWeight);
-		// bluetooth.println("kg입니다.");
+	Communication_Func();			  // 블루투스, 시리얼 통신
+
+	Get_Weight();					  // 로드셀 무게측정
+	Handle_Display();				  // 디스플레이 관리
+
+	if (State.AlarmActive) {		  // 알람 비트 활성화되면.
+		Handle_Alarm_Disable_Func();  // 사용자 무게 확인 및 무게로 인한 알람 비활성화 시 블루투스로 D 보냄.
 	}
-	Get_Weight();	   // 로드셀 무게측정
-	Handle_Display();  // 디스플레이 관리
+	Play_Music();					  // 음악 재생.
+}
+
+// 사용자 무게 확인 및 무게로 인한 알람 비활성화 시 블루투스로 D 보냄.
+void Handle_Alarm_Disable_Func(void) {
+	if (RawWeight > ALARM_OFF_WEIGHT) {					   // 현재 체중이 임계값 무게 넘으면
+		if (millis() - Timer.AlarmWeightChkTmr > SEC) {	   // 그 상태로 1초 간 유지되면 그때부터 3초간 유지되는지 계산(노이즈 방지목적)
+			if (millis() - Timer.AlarmOffTmr > SECS(3)) {  // 3초 이상 유지되면
+				State.AlarmActive = false;				   // 알람 비트 해제
+				bluetooth.println("D");					   // 블루투스로 알람 비트 해제 전송
+			}
+			Timer.AlarmOffTmr = millis();
+		}
+	} else {
+		Timer.AlarmWeightChkTmr = millis();	 // 노이즈 방지(디바운스) 타이머 초기화
+		Timer.AlarmOffTmr		= millis();	 // 3초 타이머 초기화.
+	}
 }
 
 // LCD 디스플레이 관리
@@ -195,46 +214,30 @@ void Print_Weight(void) {
 }
 
 // 블루투스, 시리얼 통신
-// void Communication_Func(void) {
-// 	Process_Bluetooth_Data();  // 블루투스로 수신한 값에 대한 처리
-// 	if (Serial.available()) {  // 시리얼 처리
-// 							   // bluetooth.write(Serial.read());
-// 	}
-// }
+void Communication_Func(void) {
+	// if (Serial.available()) {  // 시리얼 처리
+	// 						   // bluetooth.write(Serial.read());
+	// }
 
-// 블루투스 데이터 수신 인터럽트
-// void serialEvent() {
-// 	while (bluetooth.available()) {
-// 		uint8_t receivedByte = bluetooth.read();
-// 		btRxBuffer.write(receivedByte);
-// 		Serial.print(receivedByte);
-// 		Serial.println("ㅅㅂ블루투스 받았따.");
-// 	}
-// }
+	if (bluetooth.available()) {
+		char c = bluetooth.read();
+		if (c = '\n') break;  // 엔터는 무시
 
-// 블루투스 수신된 데이터 처리
-// void Process_Bluetooth_Data() {
-// 	uint8_t receivedByte;
-
-// 	while (btRxBuffer.read(&receivedByte)) {
-// 		// 수신된 데이터 처리
-// 		// 여기는 승필이랑 얘기해서 프로토콜 맞춰야됨
-// 		switch (receivedByte) {
-// 			case 'T':  // 영점
-// 				Weight.tare();
-// 				bluetooth.println("Zeroing complete");
-// 				break;
-
-// 			case 'W':  // 현재 무게 요청
-// 				bluetooth.println(RawWeight);
-// 				break;
-
-// 			default:
-// 				Serial.println("좆됐다ㅋㅋ 승필이가 이상한거 보내는데");
-// 				break;
-// 		}
-// 	}
-// }
+		switch (c) {
+			case 'W':  // 무게요청
+				bluetooth.println(RawWeight);
+				break;
+			case 'A':						// 알람 활성화 요청 받으면
+				State.AlarmActive = true;	// 알람 비트 활성화.
+				bluetooth.println("A");		// 답장.
+				break;
+			default:						// 다른거 받았을때
+				Serial.println("좆됐다ㅋㅋ 승필이가 이상한거 보내는데");
+				bluetooth.println("Shit");	// 답장.
+				break;
+		}
+	}
+}
 
 // 무게 가져옴
 bool Get_Weight() {
@@ -257,8 +260,7 @@ void First_Boot_Sequence(void) {
 		firstBoot									  = true;
 		lcd.setCursor(0, 0);
 		lcd.print("Welcome Loading");
-		// lcd.setCursor(0, 1);
-		// lcd.print("________________");
+
 		lcd.setCursor(0, 1);
 		// 셋커서 한칸식 옮기고 write로 커스텀 빈칸 쓰기
 		for (size_t i = 0; i < 16; i++) {
@@ -279,17 +281,28 @@ void First_Boot_Sequence(void) {
 	}
 }
 
-// 징글벨 때리는 함수(주의: 노래 재생되는 동안 다른 기능 전부 중지됨)
-void Music_Start(void) {
-	static const int size = sizeof(MusicDuration) / sizeof(int);
+// 징글벨 때리는 함수 (State.MusicActive의 상태 여부에 따라 음악 재생 여부가 갈림)
+void Play_Music(void) {
+	static const int size		   = sizeof(MusicDuration) / sizeof(int);  // 음악 전체 길이
+	static int		 currentNote   = 0;									   // 현재 음 순서
+	static bool		 isNotePlaying = false;								   // 지금 음 재생중인지 잠깐 쉬는박자인지
 
-	for (int note = 0; note < size; note++) {
-		int duration = 1000 / MusicDuration[note];
-		tone(Buzzer, melody[note], duration);
+	if (!State.AlarmActive) {											   // 알람 비트가 비활성화되어있으면
+		currentNote	  = 0;												   // 음악 재생되던 음 순서 0으로 되감기
+		isNotePlaying = false;											   // 음 재생부터 시작하도록(쉬는 박자부터 시작하지 않도록)
+		noTone(Buzzer);													   // 음 안나게
+		return;															   // 종료
+	}
 
-		int pauseBetweenNotes = duration * 1.30;
-		delay(pauseBetweenNotes);
-
-		noTone(Buzzer);
+	if (isNotePlaying) {																   // 잠깐 쉬는 박자 타이밍이면
+		if (millis() - Timer.MusicDelayTmr > (SEC / MusicDuration[currentNote]) * 1.30) {  // 해당 박자 길이만큼 계산해서
+			noTone(Buzzer);																   // 잠깐 소리 안내고 쉬기
+			isNotePlaying = false;														   // 지금 소리 안낸다고 표시
+			currentNote	  = (currentNote + 1) % size;									   // 음악 재생 끝나면 자동 되감기(무한 반복 재생)
+		}
+	} else {																			   // 지금 소리내야될 타이밍이면
+		tone(Buzzer, melody[currentNote], SEC / MusicDuration[currentNote]);			   // 악보길이만큼 소리냄
+		Timer.MusicDelayTmr = millis();													   // 음 쉬는 타이밍 타이머 초기화.
+		isNotePlaying		= true;														   // 지금 소리 내고있다고 표시.
 	}
 }
