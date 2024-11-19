@@ -221,7 +221,7 @@ void Communication_Func(void) {
 
 	if (bluetooth.available()) {
 		char c = bluetooth.read();
-		if (c = '\n') break;  // 엔터는 무시
+		if (c = '\n') return;  // 엔터는 무시
 
 		switch (c) {
 			case 'W':  // 무게요청
