@@ -89,7 +89,7 @@ byte Custom3[8] = {
 	B11111,
 };
 // 현재 타이머
-Timer			  Timer = {0};
+Timer			  Timer = {0, 0, 0, 0, 0, 0, 0};
 SoftwareSerial	  bluetooth(BT_RXD, BT_TXD);  // 블루투스 객체.
 LiquidCrystal_I2C lcd(LCD_Address, 16, 2);	  // lcd 객체 선언, 가로 16칸, 세로 2칸
 HX711			  Weight;					  // 로드셀 앰프 객체.
