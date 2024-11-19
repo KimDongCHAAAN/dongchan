@@ -39,7 +39,7 @@ struct MachineState {
 // 현재 기기 상태
 MachineState State = {
 	true,  // FirstBootEn
-		   // false,	// display active
+	false  // AlarmActive active
 };
 
 // 타이머 명세
@@ -89,8 +89,7 @@ byte Custom3[8] = {
 	B11111,
 };
 // 현재 타이머
-Timer Timer = {0, 0, 0, 0};
-
+Timer			  Timer = {0};
 SoftwareSerial	  bluetooth(BT_RXD, BT_TXD);  // 블루투스 객체.
 LiquidCrystal_I2C lcd(LCD_Address, 16, 2);	  // lcd 객체 선언, 가로 16칸, 세로 2칸
 HX711			  Weight;					  // 로드셀 앰프 객체.
@@ -221,7 +220,7 @@ void Communication_Func(void) {
 
 	if (bluetooth.available()) {
 		char c = bluetooth.read();
-		if (c = '\n') return;  // 엔터는 무시
+		if (c == '\n') return;	// 엔터는 무시
 
 		switch (c) {
 			case 'W':  // 무게요청
