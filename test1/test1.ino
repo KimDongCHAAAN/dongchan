@@ -21,7 +21,7 @@
 #define LCD_OFF_WEIGHT		  3.0		// 사람 내려갔을때 LCD 화면 꺼지는 임계값 무게, 단위 kg
 #define WELCOME_SCREEN_DELAY  SECS(10)	// 부팅하고 웰컴스크린 표시시간, 단위 ms
 #define WELCOME_MESSAGE_DELAY 200		// 부팅 메시지 표시시간, 단위 ms
-#define MAIN_LOOP_INTERVAL	  10		// 메인 무한루프문 반복시간, 단위 ms
+#define MAIN_LOOP_INTERVAL	  1			// 메인 무한루프문 반복시간, 단위 ms
 #define LCD_OFF_TIME		  SECS(3)	// 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
 #define ALARM_OFF_WEIGHT	  10.0		// 알람 활성화 시 알람 해제하기 위해서 넘겨야 하는 무게 임계값. 단위 kg
 
@@ -48,7 +48,6 @@ struct Timer {
 	unsigned long LcdOffTmr;		  // LCD 화면 꺼지는 타이머
 	unsigned long LcdWelcomeLoading;  // LCD 웰컴스크린 왼쪽으로 한칸씩 이동 간격
 	unsigned long LcdWelcomeTmr;	  // LCD 웰컴스크린 타이머
-	unsigned long AlarmWeightChkTmr;  // 알람 울려서 무게 올라갔을때 임계값 넘는 디바운스 타이머
 	unsigned long AlarmOffTmr;		  // 알람 울려서 무게 올라갔을때 알람 꺼지기까지 타이머
 	unsigned long MusicDelayTmr;	  // 음악 음 간 간격 타이머.
 };
@@ -89,7 +88,7 @@ byte Custom3[8] = {
 	B11111,
 };
 // 현재 타이머
-Timer			  Timer = {0, 0, 0, 0, 0, 0, 0};
+Timer			  Timer = {0, 0, 0, 0, 0, 0};
 SoftwareSerial	  bluetooth(BT_RXD, BT_TXD);  // 블루투스 객체.
 LiquidCrystal_I2C lcd(LCD_Address, 16, 2);	  // lcd 객체 선언, 가로 16칸, 세로 2칸
 HX711			  Weight;					  // 로드셀 앰프 객체.
@@ -145,33 +144,29 @@ void Main_Function(void) {
 	if (State.AlarmActive) {		  // 알람 비트 활성화되면.
 		Handle_Alarm_Disable_Func();  // 사용자 무게 확인 및 무게로 인한 알람 비활성화 시 블루투스로 D 보냄.
 	}
-	Play_Music();					  // 음악 재생.
+
+	Play_Music();  // 음악 재생.
 }
 
 // 사용자 무게 확인 및 무게로 인한 알람 비활성화 시 블루투스로 D 보냄.
 void Handle_Alarm_Disable_Func(void) {
-	if (RawWeight > ALARM_OFF_WEIGHT) {					   // 현재 체중이 임계값 무게 넘으면
-		if (millis() - Timer.AlarmWeightChkTmr > SEC) {	   // 그 상태로 1초 간 유지되면 그때부터 3초간 유지되는지 계산(노이즈 방지목적)
-			if (millis() - Timer.AlarmOffTmr > SECS(3)) {  // 3초 이상 유지되면
-				State.AlarmActive = false;				   // 알람 비트 해제
-				bluetooth.println("D");					   // 블루투스로 알람 비트 해제 전송
-			}
-			Timer.AlarmOffTmr = millis();
+	if (RawWeight > ALARM_OFF_WEIGHT) {				   // 현재 체중이 임계값 무게 넘으면
+		if (millis() - Timer.AlarmOffTmr > SECS(3)) {  // 3초 이상 유지되면
+			State.AlarmActive = false;				   // 알람 비트 해제
+			bluetooth.println("D");					   // 블루투스로 알람 비트 해제 전송
+													   // Serial.println("무게로 알람 비활성화시키고 알람해제 비트 전송함");
 		}
 	} else {
-		Timer.AlarmWeightChkTmr = millis();	 // 노이즈 방지(디바운스) 타이머 초기화
-		Timer.AlarmOffTmr		= millis();	 // 3초 타이머 초기화.
+		Timer.AlarmOffTmr = millis();  // 3초 타이머 초기화.
 	}
 }
 
 // LCD 디스플레이 관리
 void Handle_Display(void) {
-	if (RawWeight > LCD_ON_WEIGHT) {  // 디스플레이 비활성화 되어있는데 10키로 이상 감지되면
-		Activate_Display();			  // 디스플레이 활성화.
-		Print_Weight();				  // 무게 출력
+	if (RawWeight > LCD_ON_WEIGHT) {					  // 디스플레이 비활성화 되어있는데 10키로 이상 감지되면
+		Activate_Display();								  // 디스플레이 활성화.
+		Print_Weight();									  // 무게 출력
 		Timer.LcdOffTmr = millis();
-
-		Serial.println(Timer.LcdOffTmr);
 	} else if (RawWeight < LCD_OFF_WEIGHT) {			  // 지금 무게가 디스플레이 꺼짐 무게보다 낮으면
 		if (millis() - Timer.LcdOffTmr > LCD_OFF_TIME) {  // 무게가 3키로보다 낮은상태로 3초 이상 유지되면
 			Deactivate_Display();						  // 화면 끄기
@@ -225,9 +220,11 @@ void Communication_Func(void) {
 		switch (c) {
 			case 'W':  // 무게요청
 				bluetooth.println(RawWeight);
+				Serial.println("무게 요청 받아서 보냄");
 				break;
 			case 'A':						// 알람 활성화 요청 받으면
 				State.AlarmActive = true;	// 알람 비트 활성화.
+				Serial.println("알람 활성화 요청 받음");
 				bluetooth.println("A");		// 답장.
 				break;
 			default:						// 다른거 받았을때
@@ -242,6 +239,7 @@ void Communication_Func(void) {
 bool Get_Weight() {
 	if (Weight.is_ready()) {
 		RawWeight = Weight.get_units();
+		// Serial.println(RawWeight);
 		return true;
 	}
 	return false;
@@ -257,6 +255,9 @@ void First_Boot_Sequence(void) {
 	if (!firstBoot) {
 		Timer.LcdWelcomeTmr = Timer.LcdWelcomeLoading = millis();
 		firstBoot									  = true;
+
+		Serial.println("첫 부팅 실행됨");
+
 		lcd.setCursor(0, 0);
 		lcd.print("Welcome Loading");
 
