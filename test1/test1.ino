@@ -23,7 +23,7 @@
 #define WELCOME_MESSAGE_DELAY 200		// 부팅 메시지 표시시간, 단위 ms
 #define MAIN_LOOP_INTERVAL	  10		// 메인 무한루프문 반복시간, 단위 ms
 #define LCD_OFF_TIME		  SECS(3)	// 사람 내려가고 LCD가 꺼질 때까지의 시간, 단위 ms
-#define ALARM_OFF_WEIGHT	  50.0		// 알람 활성화 시 알람 해제하기 위해서 넘겨야 하는 무게 임계값. 단위 kg
+#define ALARM_OFF_WEIGHT	  10.0		// 알람 활성화 시 알람 해제하기 위해서 넘겨야 하는 무게 임계값. 단위 kg
 
 // 징글징글한년 멜로디와 음길이
 const int melody[]		  = {NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_G5, NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_D5, NOTE_D5, NOTE_E5, NOTE_D5, NOTE_G5};
