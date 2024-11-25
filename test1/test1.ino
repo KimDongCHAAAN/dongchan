@@ -26,8 +26,10 @@
 #define ALARM_OFF_WEIGHT	  10.0		// 알람 활성화 시 알람 해제하기 위해서 넘겨야 하는 무게 임계값. 단위 kg
 
 // 징글징글한년 멜로디와 음길이
-const int melody[]		  = {NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_G5, NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_D5, NOTE_D5, NOTE_E5, NOTE_D5, NOTE_G5};
-const int MusicDuration[] = {8, 8, 4, 8, 8, 4, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, 8, 8, 16, 16, 8, 8, 8, 8, 4, 4};
+const int melody[]																		= {NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_G5, NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_F5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_E5, NOTE_D5, NOTE_D5, NOTE_E5, NOTE_D5, NOTE_G5};
+const int MusicDuration[]																= {8, 8, 4, 8, 8, 4, 8, 8, 8, 8, 2, 8, 8, 8, 8, 8, 8, 8, 16, 16, 8, 8, 8, 8, 4, 4};
+float	  MusicDurationCalc[(int)sizeof(MusicDuration) / (int)sizeof(MusicDuration[0])] = {0};
+float	  AFKMusicDuration[(int)sizeof(MusicDuration) / (int)sizeof(MusicDuration[0])]	= {0};
 
 // 현재 기기 상태 명세
 struct MachineState {
@@ -120,13 +122,18 @@ void setup() {
 	Weight.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);	// 로드셀 객체 만든다
 	Weight.set_scale(ROAD_CELL_CALIBRATION);			// 캘리브레이션 시작.
 	Weight.tare();										// 부팅시 영점 잡음.
+
+	for (int i = 0; i < ((int)sizeof(MusicDuration) / (int)sizeof(MusicDuration[0])); i++) {
+		MusicDurationCalc[i] = SEC / MusicDuration[i];
+		AFKMusicDuration[i]	 = MusicDurationCalc[i] * 1.30;
+	}
 }
 
 void loop() { Main_Function(); }
 
 // early return 쓰기위해 루프함수 따로만듬
 void Main_Function(void) {
-	// 100ms 마다 루프실행
+	// 1ms 마다 루프실행
 	if (millis() - Timer.LoopTmr <= MAIN_LOOP_INTERVAL) return;
 	Timer.LoopTmr = millis();
 
@@ -213,25 +220,27 @@ void Communication_Func(void) {
 	// 						   // bluetooth.write(Serial.read());
 	// }
 
-	if (bluetooth.available()) {
-		char c = bluetooth.read();
-		if (c == '\n') return;	// 엔터는 무시
+	if (!bluetooth.available()) {
+		return;
+	}
 
-		switch (c) {
-			case 'W':  // 무게요청
-				bluetooth.println(RawWeight);
-				Serial.println("무게 요청 받아서 보냄");
-				break;
-			case 'A':						// 알람 활성화 요청 받으면
-				State.AlarmActive = true;	// 알람 비트 활성화.
-				Serial.println("알람 활성화 요청 받음");
-				bluetooth.println("A");		// 답장.
-				break;
-			default:						// 다른거 받았을때
-				Serial.println("좆됐다ㅋㅋ 승필이가 이상한거 보내는데");
-				bluetooth.println("Shit");	// 답장.
-				break;
-		}
+	char c = bluetooth.read();
+	if (c == '\n') return;	// 엔터는 무시
+
+	switch (c) {
+		case 'W':  // 무게요청
+			bluetooth.println(RawWeight);
+			Serial.println("무게 요청 받아서 보냄");
+			break;
+		case 'A':						// 알람 활성화 요청 받으면
+			State.AlarmActive = true;	// 알람 비트 활성화.
+			Serial.println("알람 활성화 요청 받음");
+			bluetooth.println("A");		// 답장.
+			break;
+		default:						// 다른거 받았을때
+			Serial.println("쓰레기값전달됨");
+			bluetooth.println("Shit");	// 답장.
+			break;
 	}
 }
 
@@ -263,7 +272,7 @@ void First_Boot_Sequence(void) {
 
 		lcd.setCursor(0, 1);
 		// 셋커서 한칸식 옮기고 write로 커스텀 빈칸 쓰기
-		for (size_t i = 0; i < 16; i++) {
+		for (char i = 0; i < 16; i++) {
 			lcd.setCursor(i, 1);
 			lcd.write(byte(3));
 		}
@@ -294,15 +303,17 @@ void Play_Music(void) {
 		return;															   // 종료
 	}
 
-	if (isNotePlaying) {																   // 잠깐 쉬는 박자 타이밍이면
-		if (millis() - Timer.MusicDelayTmr > (SEC / MusicDuration[currentNote]) * 1.30) {  // 해당 박자 길이만큼 계산해서
-			noTone(Buzzer);																   // 잠깐 소리 안내고 쉬기
-			isNotePlaying = false;														   // 지금 소리 안낸다고 표시
-			currentNote	  = (currentNote + 1) % size;									   // 음악 재생 끝나면 자동 되감기(무한 반복 재생)
+	if (isNotePlaying) {  // 잠깐 쉬는 박자 타이밍이면
+		// if (millis() - Timer.MusicDelayTmr > (SEC / MusicDuration[currentNote]) * 1.30) {  // 해당 박자 길이만큼 계산해서
+		if (millis() - Timer.MusicDelayTmr > (AFKMusicDuration[currentNote])) {
+			noTone(Buzzer);							   // 잠깐 소리 안내고 쉬기
+			isNotePlaying = false;					   // 지금 소리 안낸다고 표시
+			currentNote	  = (currentNote + 1) % size;  // 음악 재생 끝나면 자동 되감기(무한 반복 재생)
 		}
-	} else {																			   // 지금 소리내야될 타이밍이면
-		tone(Buzzer, melody[currentNote], SEC / MusicDuration[currentNote]);			   // 악보길이만큼 소리냄
-		Timer.MusicDelayTmr = millis();													   // 음 쉬는 타이밍 타이머 초기화.
-		isNotePlaying		= true;														   // 지금 소리 내고있다고 표시.
+	} else {										   // 지금 소리내야될 타이밍이면
+		// tone(Buzzer, melody[currentNote], SEC / MusicDuration[currentNote]);			   // 악보길이만큼 소리냄
+		tone(Buzzer, melody[currentNote], MusicDurationCalc[currentNote]);
+		Timer.MusicDelayTmr = millis();	 // 음 쉬는 타이밍 타이머 초기화.
+		isNotePlaying		= true;		 // 지금 소리 내고있다고 표시.
 	}
 }
