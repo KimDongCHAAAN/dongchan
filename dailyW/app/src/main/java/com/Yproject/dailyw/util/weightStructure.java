@@ -2,6 +2,7 @@ package com.Yproject.dailyw.util;
 
 import java.util.Date;
 
+// 로컬에 있는 체중 데이터를 쉽게 사용하기 위해 만들어둔 구조(로컬에서 체중 데이터를 가져온 후 이러한 형식으로 만들어서 사용)
 public class weightStructure {
     private float weight;
     private Date date;

@@ -1,16 +1,17 @@
-package com.Yproject.dailyw.ui.Bluetooth;
+package com.Yproject.dailyw.ui.home;
 
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
-public class BluetoothViewModel extends ViewModel {
+// 사용 안함
+public class HomeViewModel extends ViewModel {
 
     private final MutableLiveData<String> mText;
 
-    public BluetoothViewModel() {
+    public HomeViewModel() {
         mText = new MutableLiveData<>();
-        mText.setValue("This is dashboard fragment");
+        mText.setValue("This is home fragment");
     }
 
     public LiveData<String> getText() {
