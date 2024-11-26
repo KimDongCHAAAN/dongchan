@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">dailyW</string>
+    <string name="title_home">Home</string>
+    <string name="title_dashboard">List</string>
+    <string name="title_notifications">Setting Alarms</string>
+    <string name="title_bluetooth">Bluetooth</string>
+    <string name="delete_time">Delete</string>
+</resources>
